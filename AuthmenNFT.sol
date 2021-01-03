@@ -3,12 +3,47 @@
 
 pragma solidity ^0.6.0;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.1.0/contracts/token/ERC1155/ERC1155Burnable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.1.0/contracts/token/ERC20/IERC20.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.1.0/contracts/math/SafeMath.sol";
+//import '@openzeppelin/contracts-ethereum-package/contracts/Initializable.sol';
+//import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20.sol";
+//import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+//import "@openzeppelin/contracts-ethereum-package/IERC20.sol";
+import "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155BurnableUpgradeable.sol";
 
-contract AuthmenNFT is ERC1155Burnable {
-    using SafeMath for uint256;
+/*******************************
+ ***   Queue implementation  ***
+ *******************************/
+library QueueLib {
+    struct Queue {
+        uint256[] _array;
+        uint256 _read;
+    }
+    function push(Queue storage queue, uint256 timestamp) internal {
+        queue._array.push(timestamp);
+    }
+    function pop(Queue storage queue) internal returns (uint256)  {
+        require(queue._read < queue._array.length, "pop: Out of index.");
+
+        uint256 value = queue._array[queue._read];
+        delete(queue._array[queue._read]);
+        queue._read += 1;
+
+        return value;
+    }
+    function get(Queue storage queue, uint256 index) internal view returns (uint256) {
+        require(queue._read + index < queue._array.length, "get: Out of index.");
+        
+        return queue._array[index + queue._read];
+    }
+    function length(Queue storage queue) internal view returns (uint256) {
+        return queue._array.length - queue._read;
+    }
+    /************* End of Queue implementation *********************/
+    
+}
+
+contract AuthmenNFT is ERC1155BurnableUpgradeable  {
+    using QueueLib for QueueLib.Queue;
     
     uint256 constant AUTH1 = 0;
     uint256 constant AUTH2 = 1;
@@ -16,22 +51,25 @@ contract AuthmenNFT is ERC1155Burnable {
     uint256 constant AUTH4 = 3;
     uint256 constant AUTH5 = 4;
     uint256 constant AUTH6 = 5;
-    bytes  strAUTH1 = "Orc";
-    bytes  strAUTH2 = "Werewolf";
-    bytes  strAUTH3 = "Villager";
-    bytes  strAUTH4 = "Viking";
-    bytes  strAUTH5 = "Knight";
-    bytes  strAUTH6 = "King";
-
+    bytes  constant strAUTH1 = "Orc";
+    bytes  constant strAUTH2 = "Werewolf";
+    bytes  constant strAUTH3 = "Villager";
+    bytes  constant strAUTH4 = "Viking";
+    bytes  constant strAUTH5 = "Knight";
+    bytes  constant strAUTH6 = "King";
+    
+    uint256 constant TRY_LOCK_TIME = 10 minutes; //30 days;
     
     address _authmen;
     address _trytoken;
-    address _burned = address(0x000000000000000000000000000000000000dEaD);
+    address constant _burned = address(0x000000000000000000000000000000000000dEaD);
     
-    mapping(address => uint256[]) public stakeTime;
+    
+    // address => queue
+    mapping(address => QueueLib.Queue) private stakeTime;
     
 
-    constructor(address authmen, address trytoken) public ERC1155("AuthmenNFT") {
+    function initialize(address authmen, address trytoken) public initializer {
         _authmen  = authmen;
         _trytoken = trytoken;
     }
@@ -74,26 +112,48 @@ contract AuthmenNFT is ERC1155Burnable {
     }
     
     function stakeTRY() external {
+        
+         require((stakeTime[msg.sender].length() == 0) 
+              || (stakeTime[msg.sender].length() != 0 && now.sub(stakeTime[msg.sender].get(stakeTime[msg.sender].length() - 1)) > TRY_LOCK_TIME), 
+              "TRY is locking");
+        /*uint256 length = stakeTime[msg.sender].length();
+        if (length != 0 && now.sub(stakeTime[msg.sender].get(length - 1)) < TRY_LOCK_TIME) {
+            return;
+        }*/
+        
         IERC20(_trytoken).transferFrom(msg.sender, address(this), 2000000 ether);
         _mint(msg.sender, AUTH1, 1, strAUTH1);
         stakeTime[msg.sender].push(now);
     }
     
+    // get all TRY tokens exceed 30days out.
     function unstakeTRY() external {
-        uint256[] memory array = stakeTime[msg.sender];
-        if (array.length <= 0) return;
+        uint256 length = stakeTime[msg.sender].length();
+        if (length <= 0) return;
         
-        if (now - stakeTime[msg.sender][0] >= 30 days) {
-            // delete first element
-            for (uint256 i = 0; i < array.length - 1; i++){
-                stakeTime[msg.sender][i] = stakeTime[msg.sender][i + 1];
+        // delete elements
+        uint256 count = 0;
+        for (uint256 i = 0; i < length; i++) {
+            if (now.sub(stakeTime[msg.sender].get(i)) >= TRY_LOCK_TIME) {
+                count = count.add(1);
+            } else {
+                break;
             }
-            stakeTime[msg.sender].pop();
-            
-            IERC20(_trytoken).transfer(msg.sender, 2000000 ether);
-        } else {
-            return;
         }
+
+        for (uint256 i = 0; i < count; i++) {
+            stakeTime[msg.sender].pop();
+        }
+        
+        IERC20(_trytoken).transfer(msg.sender, count.mul(2000000 ether));
+    }
+    
+    function latestTRYStakeTime() external view returns (uint256) {
+        if (stakeTime[msg.sender].length() == 0) {
+            return 0;
+        } else {
+            return stakeTime[msg.sender].get(stakeTime[msg.sender].length() - 1);
+        }
+        
     }
 }
-

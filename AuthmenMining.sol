@@ -3,13 +3,13 @@
 
 pragma solidity ^0.6.0;
 
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.3.0/contracts/math/SafeMath.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.3.0/contracts/token/ERC20/IERC20.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v3.3.0/contracts/token/ERC1155/IERC1155Upgradeable.sol";
-import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.3.0/contracts/proxy/Initializable.sol";
+import "@openzeppelin/contracts-ethereum-package/contracts/math/SafeMath.sol";
+import "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155BurnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155ReceiverUpgradeable.sol";
 
 
-contract miningAuthmen is Initializable {
+contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
     using SafeMath for uint256;
     
     struct StakeInfo {
@@ -35,9 +35,10 @@ contract miningAuthmen is Initializable {
     
     mapping(address => StakeInfo) accountsLPInfo;
     
-    uint256 totalLPAmount = 0;
+    uint256 totalLPAmount;
     
     function initialize(address authmen, address mining, address authmenNFT, address LPToken) public initializer {
+		totalLPAmount = 0;
         _authmen  = authmen;
         _mining = mining;
         _authmenNFT = authmenNFT;
@@ -121,7 +122,7 @@ contract miningAuthmen is Initializable {
         require(nftLevel >= AUTH1 && nftLevel <= AUTH5, "NFT Level is invalid!");
         require(amount > 0, "Amount should be bigger than 0!");
         
-        IERC1155Upgradeable(_authmenNFT).safeTransferFrom(msg.sender, address(this), nftLevel, amount, "");
+        ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(msg.sender, address(this), nftLevel, amount, "");
         
         if (accountsLPInfo[msg.sender].stakeTime != 0) {
             if (isNFTEmpty(msg.sender)) {
@@ -160,7 +161,7 @@ contract miningAuthmen is Initializable {
              }
         }
         
-        IERC1155Upgradeable(_authmenNFT).safeTransferFrom(address(this), msg.sender, nftLevel, amount, "");
+        ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(address(this), msg.sender, nftLevel, amount, "");
     }
     
     function stakeLPToken(uint256 amount) public {
@@ -242,6 +243,18 @@ contract miningAuthmen is Initializable {
             IERC20(_authmen).transferFrom(_mining, msg.sender, totalEarning);
         }
     }
+	
+	function onERC1155Received(address, address, uint256, uint256, bytes calldata) external override returns(bytes4) {
+        return this.onERC1155Received.selector;
+    }
+	
+	function onERC1155BatchReceived(address operator, address from, uint256[] calldata ids, uint256[] calldata values, bytes calldata data) external override returns(bytes4) {
+		return this.onERC1155BatchReceived.selector;
+	}
+
+	function supportsInterface(bytes4 interfaceId) external override view returns (bool) {
+		return true;
+	}
     
     
 }
