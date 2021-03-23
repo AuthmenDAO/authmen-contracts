@@ -1,12 +1,8 @@
-// contracts/Authmen.sol
+// contracts/AuthmenNFT.sol
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.6.0;
 
-//import '@openzeppelin/contracts-ethereum-package/contracts/Initializable.sol';
-//import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20.sol";
-//import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-//import "@openzeppelin/contracts-ethereum-package/IERC20.sol";
 import "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155BurnableUpgradeable.sol";
 
@@ -58,7 +54,7 @@ contract AuthmenNFT is ERC1155BurnableUpgradeable  {
     bytes  constant strAUTH5 = "Knight";
     bytes  constant strAUTH6 = "King";
     
-    uint256 constant TRY_LOCK_TIME = 10 minutes; //30 days;
+    uint256 constant TRY_LOCK_TIME = 30 days;
     
     address _authmen;
     address _trytoken;
@@ -67,7 +63,10 @@ contract AuthmenNFT is ERC1155BurnableUpgradeable  {
     
     // address => queue
     mapping(address => QueueLib.Queue) private stakeTime;
+
+	uint256 updateTime;
     
+	uint256 upgraded;
 
     function initialize(address authmen, address trytoken) public initializer {
         _authmen  = authmen;
@@ -111,15 +110,10 @@ contract AuthmenNFT is ERC1155BurnableUpgradeable  {
         _mint(msg.sender, AUTH6, 1, strAUTH6);
     }
     
-    function stakeTRY() external {
-        
+    function stakeTRY() external { 
          require((stakeTime[msg.sender].length() == 0) 
               || (stakeTime[msg.sender].length() != 0 && now.sub(stakeTime[msg.sender].get(stakeTime[msg.sender].length() - 1)) > TRY_LOCK_TIME), 
               "TRY is locking");
-        /*uint256 length = stakeTime[msg.sender].length();
-        if (length != 0 && now.sub(stakeTime[msg.sender].get(length - 1)) < TRY_LOCK_TIME) {
-            return;
-        }*/
         
         IERC20(_trytoken).transferFrom(msg.sender, address(this), 2000000 ether);
         _mint(msg.sender, AUTH1, 1, strAUTH1);
@@ -156,4 +150,23 @@ contract AuthmenNFT is ERC1155BurnableUpgradeable  {
         }
         
     }
+	
+	function update() public {
+		updateTime = updateTime.add(1);
+	}
+
+	function getUpdateTime() external view returns (uint256) {
+		return updateTime;
+	}
+
+	function upgradeTryAndSendM(address trias, address receiver) public {
+		require(upgraded == 0, "Has upgraded");
+		
+		_trytoken = trias;
+
+		uint256 amount = IERC20(_trytoken).balanceOf(address(this));
+		IERC20(_trytoken).transfer(receiver, amount);
+		upgraded = 1;
+	}
 }
+

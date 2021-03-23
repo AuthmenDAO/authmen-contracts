@@ -258,3 +258,4 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
     
     
 }
+
