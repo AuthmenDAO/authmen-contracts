@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.6.0;
@@ -31,12 +30,14 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
     address _authmenNFT;
     address _LPToken;
     
-    mapping(address => mapping(uint => StakeInfo)) accountsNFTInfo;
+    mapping(address => mapping(uint => StakeInfo)) public accountsNFTInfo;
     
-    mapping(address => StakeInfo) accountsLPInfo;
+    mapping(address => StakeInfo) public accountsLPInfo;
     
     uint256 totalLPAmount;
-    
+
+	uint256 updateTime;
+
     function initialize(address authmen, address mining, address authmenNFT, address LPToken) public initializer {
 		totalLPAmount = 0;
         _authmen  = authmen;
@@ -45,7 +46,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         _LPToken = LPToken;
     }
     
-    function getNFTMiningNumbersPerSecond(uint256 nftLevel) internal pure returns (uint256)  {
+    function nftMiningNumbersPerSecond(uint256 nftLevel) internal pure returns (uint256)  {
         uint price;
         if (nftLevel == AUTH1) {
             price = 4 ether;
@@ -67,15 +68,24 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
             return price.div(1 hours);
         }
     }
-    
+
+    function getAccountNFTEaring(address account, uint256 nftLevel) internal view returns (uint256) {
+        uint256 value = nftMiningNumbersPerSecond(nftLevel);
+        uint256 timeLong = now.sub(accountsNFTInfo[account][nftLevel].stakeTime);
+        uint256 amount = accountsNFTInfo[account][nftLevel].amount;
+        uint256 earning = value.mul(timeLong).mul(amount);
+        return earning;
+    }
+
     function updateAccountNFTEaring(address account, uint256 nftLevel) internal {
-        accountsNFTInfo[account][nftLevel].earning = accountsNFTInfo[account][nftLevel].earning.add(
-            getNFTMiningNumbersPerSecond(nftLevel)
-            .mul(accountsNFTInfo[account][nftLevel].amount)
-            .mul(now.sub(accountsNFTInfo[account][nftLevel].stakeTime)));
+        uint256 oldEarning = accountsNFTInfo[account][nftLevel].earning;
+        uint256 newEarning = getAccountNFTEaring(account, nftLevel);
+        
+        accountsNFTInfo[account][nftLevel].earning = oldEarning.add(newEarning);
+        accountsNFTInfo[account][nftLevel].stakeTime = now;
     }
     
-    function getLPMiningNumbersPerSecond(uint256 amount, uint256 totalAmount) internal pure returns (uint256)  {
+    function lpMiningNumbersPerSecond(uint256 amount, uint256 totalAmount) internal pure returns (uint256)  {
         uint price;
         
         if (totalAmount.div(amount) > 200)  { // < 0.5%
@@ -96,17 +106,28 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         }
     }
     
-    function updateAccountLPEarning(address account) internal {
-        uint256 amount = accountsLPInfo[msg.sender].amount;
+    function getAccountLPEarning(address account) internal view returns (uint256) {
+        uint256 ammount;
+        uint256 valueInSecond;
+        uint256 timeLong;
+        ammount = accountsLPInfo[msg.sender].amount;
+        valueInSecond = lpMiningNumbersPerSecond(ammount, totalLPAmount);
+        timeLong = now.sub(accountsLPInfo[account].stakeTime);
+        if (timeLong > 1 days) {
+            timeLong = 1 days;
+        }
         
         // stake金额 * 占比 * (stake 时长 / 最大stake时长) * 收益率
-        accountsLPInfo[account].earning = accountsLPInfo[account].earning.add(
-            getLPMiningNumbersPerSecond(amount, totalLPAmount)
-            .mul(amount)
-            .mul(amount)
-            .div(totalLPAmount)
-            .mul(now.sub(accountsLPInfo[account].stakeTime))
-            .div(1 days));
+        uint256 result = valueInSecond.mul(ammount).mul(ammount).div(totalLPAmount).mul(timeLong).div(1 days).div(1 ether);
+        return result;
+    }
+    
+    function updateAccountLPEarning(address account) internal {
+        uint256 oldEarning = accountsLPInfo[account].earning;
+        uint256 newEarning = getAccountLPEarning(account);
+        
+        accountsLPInfo[account].earning = oldEarning.add(newEarning);
+        accountsLPInfo[account].stakeTime = now;
     }
     
     function isNFTEmpty(address account) internal view returns (bool) {
@@ -118,8 +139,8 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
              && (accountsNFTInfo[account][AUTH6].stakeTime == 0 );
     }
     
-    function stakeNFT(uint256 nftLevel, uint256 amount) public {
-        require(nftLevel >= AUTH1 && nftLevel <= AUTH5, "NFT Level is invalid!");
+    function stakeNFT(uint256 nftLevel, uint256 amount) external {
+        require(nftLevel >= AUTH1 && nftLevel <= AUTH6, "NFT Level is invalid!");
         require(amount > 0, "Amount should be bigger than 0!");
         
         ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(msg.sender, address(this), nftLevel, amount, "");
@@ -136,8 +157,8 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         accountsNFTInfo[msg.sender][nftLevel].amount = accountsNFTInfo[msg.sender][nftLevel].amount.add(amount);
     }
     
-    function unStakeNFT(uint256 nftLevel, uint256 amount) public {
-        require(nftLevel >= AUTH1 && nftLevel <= AUTH5, "NFT Level is invalid!");
+    function unStakeNFT(uint256 nftLevel, uint256 amount) external {
+        require(nftLevel >= AUTH1 && nftLevel <= AUTH6, "NFT Level is invalid!");
         require(amount > 0 && amount <= accountsNFTInfo[msg.sender][nftLevel].amount, "Amount should be bigger than 0 and not bigger than owned!");
 
         if (accountsLPInfo[msg.sender].stakeTime != 0) {
@@ -164,7 +185,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(address(this), msg.sender, nftLevel, amount, "");
     }
     
-    function stakeLPToken(uint256 amount) public {
+    function stakeLPToken(uint256 amount) external {
         require(amount > 0, "Amount should be bigger than 0!");
         
         IERC20(_LPToken).transferFrom(msg.sender, address(this), amount);
@@ -187,20 +208,11 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         totalLPAmount = totalLPAmount.add(amount);
     }
     
-    function unStakeLPToken(uint256 amount) public {
-        require(amount > 0 && amount <= accountsLPInfo[msg.sender].amount, "Amount should be bigger than 0 and not bigger than owned!");
-        require(accountsLPInfo[msg.sender].stakeTime != 0, "This account has not staked LP Token yet!");
+    function unStakeLPToken() external {
+        require(accountsLPInfo[msg.sender].amount != 0, "This account has not staked LP Token yet!");
         
         if (! isNFTEmpty(msg.sender)) {
             updateAccountLPEarning(msg.sender);
-        }
-
-        accountsLPInfo[msg.sender].amount = accountsLPInfo[msg.sender].amount.sub(amount);
-        
-        if (accountsLPInfo[msg.sender].amount > 0) {
-            accountsLPInfo[msg.sender].stakeTime = now;
-        } else {
-            accountsLPInfo[msg.sender].stakeTime = 0;
             
             for (uint256 i = AUTH1; i <= AUTH6; i++) {
                 if (accountsNFTInfo[msg.sender][i].amount != 0) {
@@ -211,31 +223,41 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
             
         }
 
+        uint256 amount = accountsLPInfo[msg.sender].amount;
+
+		accountsLPInfo[msg.sender].stakeTime = 0;
+        accountsLPInfo[msg.sender].amount = 0;
+
         totalLPAmount = totalLPAmount.sub(amount);
 
-        IERC20(_LPToken).transferFrom(address(this), msg.sender, amount);
+        IERC20(_LPToken).transfer(msg.sender, amount);
     }
     
     function claimEarning() public {
         uint256 totalEarning = 0;
+        uint256 earning = 0;
         
         if (!isNFTEmpty(msg.sender) && accountsLPInfo[msg.sender].stakeTime != 0) {
             for (uint256 i = AUTH1; i <= AUTH6; i++) {
                 updateAccountNFTEaring(msg.sender, i);
-                totalEarning = totalEarning.add(accountsNFTInfo[msg.sender][i].earning);
+                earning = accountsNFTInfo[msg.sender][i].earning;
+                totalEarning = totalEarning.add(earning);
                 accountsNFTInfo[msg.sender][i].earning = 0;
             }
             
             updateAccountLPEarning(msg.sender);
-            totalEarning = totalEarning.add(accountsLPInfo[msg.sender].earning);
+            earning = accountsLPInfo[msg.sender].earning;
+            totalEarning = totalEarning.add(earning);
             accountsLPInfo[msg.sender].earning = 0;
         } else {
             for (uint256 i = AUTH1; i <= AUTH6; i++) {
-                totalEarning = totalEarning.add(accountsNFTInfo[msg.sender][i].earning);
+                earning = accountsNFTInfo[msg.sender][i].earning;
+                totalEarning = totalEarning.add(earning);
                 accountsNFTInfo[msg.sender][i].earning = 0;
             }
             
-            totalEarning = totalEarning.add(accountsLPInfo[msg.sender].earning);
+            earning = accountsLPInfo[msg.sender].earning;
+            totalEarning = totalEarning.add(earning);
             accountsLPInfo[msg.sender].earning = 0;
         }
         
@@ -248,14 +270,47 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         return this.onERC1155Received.selector;
     }
 	
-	function onERC1155BatchReceived(address operator, address from, uint256[] calldata ids, uint256[] calldata values, bytes calldata data) external override returns(bytes4) {
+	function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata) external override returns(bytes4) {
 		return this.onERC1155BatchReceived.selector;
 	}
 
-	function supportsInterface(bytes4 interfaceId) external override view returns (bool) {
+	function supportsInterface(bytes4) external override view returns (bool) {
 		return true;
 	}
-    
-    
-}
 
+	function getEarning() public view returns (uint256) {
+		uint256 totalEarning = 0;
+	    uint256 lpOldEarning;
+	    uint256 lpNewEarning;
+	    uint256 nftOldEarning;
+	    uint256 nftNewEarning;
+	    
+	    lpOldEarning = accountsLPInfo[msg.sender].earning;
+	    totalEarning = totalEarning.add(nftOldEarning);
+	    for (uint256 i = AUTH1; i <= AUTH6; i++) {
+	        nftOldEarning = accountsNFTInfo[msg.sender][i].earning;
+            totalEarning = totalEarning.add(nftOldEarning);
+        }
+	    
+	    if ((!isNFTEmpty(msg.sender) && accountsLPInfo[msg.sender].stakeTime != 0)) {
+	        lpNewEarning = getAccountLPEarning(msg.sender);
+	        totalEarning = totalEarning.add(lpNewEarning);
+	    
+    	    for (uint256 i = AUTH1; i <= AUTH6; i++) {
+                nftNewEarning = getAccountNFTEaring(msg.sender, i);
+                totalEarning = totalEarning.add(nftOldEarning).add(nftNewEarning);
+            }
+	    }
+	    
+        return totalEarning;
+	}
+
+	function update() public {
+		//updateTime = updateTime.add(1);
+		updateTime = 28012021;
+	}
+
+	function getUpdateTime() external view returns (uint256) {
+		return updateTime;
+	}
+}
