@@ -2,19 +2,23 @@
 
 pragma solidity ^0.6.0;
 
-import "@openzeppelin/contracts-ethereum-package/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155BurnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155ReceiverUpgradeable.sol";
+//import "@openzeppelin/contracts-ethereum-package/contracts/math/SafeMath.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.3.0/contracts/math/SafeMath.sol";
+//import "@openzeppelin/contracts-ethereum-package/contracts/token/ERC20/IERC20.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v3.3.0/contracts/token/ERC20/IERC20.sol";
+//import "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155BurnableUpgradeable.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v3.3.0/contracts/token/ERC1155/ERC1155BurnableUpgradeable.sol";
+//import "@openzeppelin/contracts-upgradeable/token/ERC1155/IERC1155ReceiverUpgradeable.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/v3.3.0/contracts/token/ERC1155/IERC1155ReceiverUpgradeable.sol";
 
 contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
     using SafeMath for uint256;
 
-    event stakeNFT(address indexed from, uint256 nftLevel, uint256 amount);
-    event unStakeNFT(address indexed from, uint256 nftLevel, uint256 amount);
-    event stakeLPToken(address indexed from, uint256 amount);
-    event unStakeLPToken(address indexed from);
-    event claimEarning(address indexed from);
+    event stake_NFT(address indexed from, uint256 nftLevel, uint256 amount);
+    event unStake_NFT(address indexed from, uint256 nftLevel, uint256 amount);
+    event stake_LPToken(address indexed from, uint256 amount);
+    event unStake_LPToken(address indexed from);
+    event claim_Earning(address indexed from);
 
     struct StakeInfo {
         uint256 amount;
@@ -48,7 +52,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         address LPToken
     ) public initializer {
         require(authmen != address(0), "authmen address required");
-        require(ming != address(0), "mining account address required");
+        require(mining != address(0), "mining account address required");
         require(authmenNFT != address(0), "authmenNFT address required");
         require(LPToken != address(0), "LPToken address required");
 
@@ -187,15 +191,13 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
         );
         require(amount > 0, "Amount should be bigger than 0!");
 
-        bool success =
-            ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(
-                msg.sender,
-                address(this),
-                nftLevel,
-                amount,
-                ""
-            );
-        require(success, "safeTransferFrom failed");
+        ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(
+            msg.sender,
+            address(this),
+            nftLevel,
+            amount,
+            ""
+        );
 
         if (accountsLPInfo[msg.sender].stakeTime != 0) {
             if (isNFTEmpty(msg.sender)) {
@@ -212,7 +214,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
             .amount
             .add(amount);
 
-        emit stakeNFT(msg.sender, nftLevel, amount);
+        emit stake_NFT(msg.sender, nftLevel, amount);
     }
 
     function unStakeNFT(uint256 nftLevel, uint256 amount) external {
@@ -251,17 +253,16 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
             }
         }
 
-        bool success =
-            ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(
-                address(this),
-                msg.sender,
-                nftLevel,
-                amount,
-                ""
-            );
-        require(success, "safeTransferFrom failed");
 
-        emit unStakeLPToken(msg.sender, nftLevel, amount);
+        ERC1155BurnableUpgradeable(_authmenNFT).safeTransferFrom(
+            address(this),
+            msg.sender,
+            nftLevel,
+            amount,
+            ""
+        );
+
+        emit unStake_NFT(msg.sender, nftLevel, amount);
     }
 
     function stakeLPToken(uint256 amount) external {
@@ -290,7 +291,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
 
         totalLPAmount = totalLPAmount.add(amount);
 
-        emit stakeLPToken(msg.sender, amount);
+        emit stake_LPToken(msg.sender, amount);
     }
 
     function unStakeLPToken() external {
@@ -319,7 +320,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
 
         IERC20(_LPToken).transfer(msg.sender, amount);
 
-        emit unStakeLPToken(msg.sender);
+        emit unStake_LPToken(msg.sender);
     }
 
     function claimEarning() external {
@@ -367,7 +368,7 @@ contract miningAuthmen is Initializable, IERC1155ReceiverUpgradeable {
                 );
             require(success, "transferFrom failed");
 
-            emit claimEarning(msg.sender);
+            emit claim_Earning(msg.sender);
         }
     }
 
