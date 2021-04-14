@@ -135,7 +135,7 @@ contract AuthmenNFT is ERC1155BurnableUpgradeable {
         IERC20(_trytoken).transferFrom(
             msg.sender,
             address(this),
-            2000000 ether
+            2000 ether
         );
         _mint(msg.sender, AUTH1, 1, strAUTH1);
         stakeTime[msg.sender].push(now);
@@ -160,7 +160,7 @@ contract AuthmenNFT is ERC1155BurnableUpgradeable {
             stakeTime[msg.sender].pop();
         }
 
-        IERC20(_trytoken).transfer(msg.sender, count.mul(2000000 ether));
+        IERC20(_trytoken).transfer(msg.sender, count.mul(2000 ether));
     }
 
     function latestTRYStakeTime() external view returns (uint256) {
